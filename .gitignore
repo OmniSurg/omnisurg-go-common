@@ -1,0 +1,12 @@
+bin/
+*.test
+*.out
+coverage.txt
+.DS_Store
+.idea/
+.vscode/
+SCRATCH.md
+NOTES.md
+*.md
+CLAUDE.md
+!/README.md
