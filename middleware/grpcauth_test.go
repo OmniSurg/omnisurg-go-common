@@ -39,6 +39,31 @@ func invoke(t *testing.T, opts mw.InterceptorOptions, md metadata.MD, fullMethod
 	return gotID, gotOK, err
 }
 
+// TestInterceptorStashesRawTokenOnContext proves the gRPC inbound path exposes
+// the verified raw token through the same context helper as the HTTP path, so a
+// downstream gate forwards the ORIGINAL token uniformly on either transport.
+func TestInterceptorStashesRawTokenOnContext(t *testing.T) {
+	tok := signTestJWT(t, ojwt.Claims{
+		Subject:  "11111111-1111-1111-1111-111111111111",
+		TenantID: "00000000-0000-0000-0000-000000000001",
+		Role:     "practice_admin",
+	})
+	md := metadata.Pairs(mw.MetadataKeyJWT, tok)
+	interceptor := mw.UnaryServerInterceptor(mw.InterceptorOptions{JWTSecret: testSecret, RequireTenant: true})
+	ctx := metadata.NewIncomingContext(context.Background(), md)
+
+	var gotToken string
+	var gotOK bool
+	handler := func(ctx context.Context, req any) (any, error) {
+		gotToken, gotOK = mw.JWTFromContext(ctx)
+		return "ok", nil
+	}
+	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/omnisurg.clinical.v1.ClinicalService/GetVisitClinicalStatus"}, handler)
+	require.NoError(t, err)
+	assert.True(t, gotOK, "the interceptor must stash the verified raw token on the context")
+	assert.Equal(t, tok, gotToken)
+}
+
 func TestInterceptorVerifiesJWTAndExtractsIdentity(t *testing.T) {
 	tok := signTestJWT(t, ojwt.Claims{
 		Subject:      "11111111-1111-1111-1111-111111111111",

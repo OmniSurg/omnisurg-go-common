@@ -37,6 +37,11 @@ func JWTAuth(secret string) gin.HandlerFunc {
 			ProviderRole: claims.ProviderRole,
 			MFAVerified:  claims.MFAVerified,
 		})
+		// Also stash the raw verified token on the request Go context so any
+		// downstream code reading c.Request.Context() (for example a
+		// service-to-service gate) can forward the ORIGINAL signed JWT. This is
+		// additive: the identity above stays the authoritative source for RBAC.
+		c.Request = c.Request.WithContext(WithJWT(c.Request.Context(), parts[1]))
 		c.Next()
 	}
 }

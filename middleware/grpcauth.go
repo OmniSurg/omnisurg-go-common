@@ -139,6 +139,11 @@ func UnaryServerInterceptor(opts InterceptorOptions) grpc.UnaryServerInterceptor
 			id.Role = claims.Role
 			id.ProviderRole = claims.ProviderRole
 			id.MFAVerified = claims.MFAVerified
+			// Stash the verified raw token on the context under the SAME key the
+			// HTTP JWTAuth path uses, so a downstream gate forwards the ORIGINAL
+			// token uniformly on either inbound transport. Only the verified
+			// token is stashed; the discrete-key fallback below carries no JWT.
+			ctx = WithJWT(ctx, jwtVals[0])
 		} else if opts.AllowSystemCaller && internalTokenMatches(md, opts.InternalAuthToken) {
 			// System initiated fallback: discrete, unverified identity keys. Read
 			// ONLY for an explicitly enabled service that proves it is an internal

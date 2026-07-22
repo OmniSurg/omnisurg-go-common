@@ -2,6 +2,7 @@ package middleware_test
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -128,6 +129,44 @@ func TestJWTAuthPassesAndSetsIdentity(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "u-1", w.Body.String())
+}
+
+func TestJWTAuthStashesRawTokenOnRequestContext(t *testing.T) {
+	var sink bytes.Buffer
+	r := newRouter(t, &sink)
+	var (
+		gotToken string
+		gotOK    bool
+	)
+	r.GET("/p", mw.JWTAuth(testSecret), func(c *gin.Context) {
+		// Downstream code (for example a service-to-service gate) reads the raw
+		// token from the request Go context, not from gin, so it can forward the
+		// ORIGINAL signed JWT even when the call did not arrive over gRPC.
+		gotToken, gotOK = mw.JWTFromContext(c.Request.Context())
+		c.String(200, "ok")
+	})
+
+	tok, err := ojwt.Sign(ojwt.Claims{
+		Subject:  "u-1",
+		TenantID: "tenant-a",
+		BranchID: "b-1",
+		Role:     "reception",
+	}, testSecret, time.Hour)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest("GET", "/p", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, gotOK, "JWTAuth must stash the raw token on the request context")
+	assert.Equal(t, tok, gotToken, "the stashed token must be the exact raw JWT")
+}
+
+func TestJWTFromContextAbsentWhenUnset(t *testing.T) {
+	_, ok := mw.JWTFromContext(context.Background())
+	assert.False(t, ok, "JWTFromContext returns false when no token was stashed")
 }
 
 func TestInternalAPIKeyRejectsMissing(t *testing.T) {
