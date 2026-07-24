@@ -22,8 +22,10 @@ import (
 // that lacks one of these fields (for example a service that does not encrypt
 // PII has no KEK) is simply never checked for it.
 var guardedSecretVars = map[string]bool{
-	"OMNISURG_JWT_SECRET": true,
-	"OMNISURG_KEK_BASE64": true,
+	"OMNISURG_JWT_SECRET":             true,
+	"OMNISURG_KEK_BASE64":             true,
+	"OMNISURG_INTERNAL_API_KEY":       true,
+	"OMNISURG_PATIENT_INTERNAL_TOKEN": true,
 }
 
 // placeholderSecrets are obvious not-yet-set values. Matched case
@@ -42,6 +44,8 @@ var placeholderSecrets = map[string]bool{
 var localDevSecrets = map[string]bool{
 	"local-dev-secret-change-me":                   true, // OMNISURG_JWT_SECRET default
 	"bG9jYWwtZGV2LWtlay0wMDAwMDAwMDAwMDAwMDAwMDA=": true, // OMNISURG_KEK_BASE64 default
+	"local-internal-key-change-me":                 true, // OMNISURG_INTERNAL_API_KEY default
+	"local-patient-internal-token-change-me":       true, // OMNISURG_PATIENT_INTERNAL_TOKEN default
 }
 
 // Load reads dotenvPath (if non empty and file exists) into the process

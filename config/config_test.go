@@ -289,3 +289,88 @@ func TestConfigDoesNotFalsePositiveOnKekLessNestedServiceInProduction(t *testing
 	require.NoError(t, config.Load(&cfg, ""))
 	assert.Equal(t, strongJWT, cfg.Secrets.JWTSecret)
 }
+
+// systemCallerSecretsFixture models a service that trusts the two
+// system-caller secrets: the internal API key (guards the recall sweep
+// trigger) and the patient-service internal token (guards the bulk
+// consent-gated patient PII read).
+type systemCallerSecretsFixture struct {
+	InternalAPIKey       string `envconfig:"OMNISURG_INTERNAL_API_KEY" required:"true"`
+	PatientInternalToken string `envconfig:"OMNISURG_PATIENT_INTERNAL_TOKEN" required:"true"`
+	Env                  string `envconfig:"OMNISURG_ENV" default:"local"`
+}
+
+// The committed local-dev values (see omnisurg-infrastructure compose defaults).
+const (
+	localDevInternalAPIKey       = "local-internal-key-change-me"
+	localDevPatientInternalToken = "local-patient-internal-token-change-me"
+	strongInternalAPIKey         = "9a4f2c8e1b6d3057af92c4e8b1d6053729af1c8e6d40b7295c1a8e4d70b3f61"
+	strongPatientInternalToken   = "d7c1e9a4f2b8360e5a1d9c3e7f0b4a6829d5c1e7f30a4b6892d1c5e7a9f3b06"
+)
+
+func TestConfigRejectsPlaceholderOrLocalSecretsForSystemCallerVarsInProduction(t *testing.T) {
+	cases := []struct {
+		name       string
+		apiKey     string
+		token      string
+		wantErrVar string
+	}{
+		{"local-dev internal api key rejected", localDevInternalAPIKey, strongPatientInternalToken, "OMNISURG_INTERNAL_API_KEY"},
+		{"local-dev patient internal token rejected", strongInternalAPIKey, localDevPatientInternalToken, "OMNISURG_PATIENT_INTERNAL_TOKEN"},
+		{"empty internal api key rejected", "", strongPatientInternalToken, "OMNISURG_INTERNAL_API_KEY"},
+		{"empty patient internal token rejected", strongInternalAPIKey, "", "OMNISURG_PATIENT_INTERNAL_TOKEN"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("OMNISURG_ENV", "staging")
+			t.Setenv("OMNISURG_INTERNAL_API_KEY", tc.apiKey)
+			t.Setenv("OMNISURG_PATIENT_INTERNAL_TOKEN", tc.token)
+
+			var cfg systemCallerSecretsFixture
+			err := config.Load(&cfg, "")
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErrVar)
+			// The error must never leak the secret value itself. Empty values
+			// are trivially contained in any string, so only non-empty values
+			// are checked here.
+			if tc.apiKey != "" {
+				assert.NotContains(t, err.Error(), tc.apiKey)
+			}
+			if tc.token != "" {
+				assert.NotContains(t, err.Error(), tc.token)
+			}
+		})
+	}
+}
+
+func TestConfigAllowsLocalDevSecretsForSystemCallerVarsInLocalEnv(t *testing.T) {
+	t.Setenv("OMNISURG_ENV", "local")
+	t.Setenv("OMNISURG_INTERNAL_API_KEY", localDevInternalAPIKey)
+	t.Setenv("OMNISURG_PATIENT_INTERNAL_TOKEN", localDevPatientInternalToken)
+
+	var cfg systemCallerSecretsFixture
+	require.NoError(t, config.Load(&cfg, ""))
+	assert.Equal(t, localDevInternalAPIKey, cfg.InternalAPIKey)
+	assert.Equal(t, localDevPatientInternalToken, cfg.PatientInternalToken)
+}
+
+func TestConfigAllowsLocalDevSecretsForSystemCallerVarsWhenEnvUnset(t *testing.T) {
+	os.Unsetenv("OMNISURG_ENV")
+	t.Setenv("OMNISURG_INTERNAL_API_KEY", localDevInternalAPIKey)
+	t.Setenv("OMNISURG_PATIENT_INTERNAL_TOKEN", localDevPatientInternalToken)
+
+	var cfg systemCallerSecretsFixture
+	require.NoError(t, config.Load(&cfg, ""))
+	assert.Equal(t, localDevInternalAPIKey, cfg.InternalAPIKey)
+}
+
+func TestConfigAcceptsStrongSystemCallerSecretsInProduction(t *testing.T) {
+	t.Setenv("OMNISURG_ENV", "production")
+	t.Setenv("OMNISURG_INTERNAL_API_KEY", strongInternalAPIKey)
+	t.Setenv("OMNISURG_PATIENT_INTERNAL_TOKEN", strongPatientInternalToken)
+
+	var cfg systemCallerSecretsFixture
+	require.NoError(t, config.Load(&cfg, ""))
+	assert.Equal(t, strongInternalAPIKey, cfg.InternalAPIKey)
+	assert.Equal(t, strongPatientInternalToken, cfg.PatientInternalToken)
+}
