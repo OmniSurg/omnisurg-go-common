@@ -21,7 +21,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 	c, err := crypto.NewCipher(dek)
 	require.NoError(t, err)
 
-	plain := []byte("reception@kawome.test")
+	plain := []byte("reception@acme.test")
 	blob, err := c.Encrypt(plain)
 	require.NoError(t, err)
 	assert.NotEqual(t, plain, blob, "ciphertext must differ from plaintext")
