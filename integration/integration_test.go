@@ -32,7 +32,7 @@ func TestEndToEndChain(t *testing.T) {
 		tcpg.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
-	defer container.Terminate(ctx)
+	defer func() { _ = container.Terminate(ctx) }()
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)

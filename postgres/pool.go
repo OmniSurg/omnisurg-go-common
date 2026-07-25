@@ -1,5 +1,5 @@
 // Package postgres provides the OmniSurg pgxpool factory. The factory wires
-// BeforeAcquire and AfterRelease hooks that reset the app.tenant_id GUC on
+// PrepareConn and AfterRelease hooks that reset the app.tenant_id GUC on
 // every connection checkout and release, which keeps RLS isolation watertight
 // across pooled connections. Services compose their repositories on top of
 // the pool plus WithTenant which sets the GUC for the duration of a scoped
@@ -55,11 +55,19 @@ func OpenPool(ctx context.Context, opts Options) (*pgxpool.Pool, error) {
 	cfg.MaxConns = opts.MaxConns
 	cfg.MaxConnLifetime = opts.MaxConnLifetime
 
-	cfg.BeforeAcquire = func(c context.Context, conn *pgx.Conn) bool {
+	// PrepareConn runs before every checkout and resets the app.tenant_id GUC
+	// so a pooled connection never carries a prior request's tenant scope. A
+	// failed reset returns false with a nil error, which destroys the tainted
+	// connection and retries the acquisition on a fresh one, so a connection
+	// that cannot be scrubbed is never handed to a caller. This is the exact
+	// behaviour pgx runs for the now deprecated BeforeAcquire hook, which it
+	// internally adapts to a PrepareConn returning (result, nil); using
+	// PrepareConn directly keeps the RLS reset on the non deprecated hook.
+	cfg.PrepareConn = func(c context.Context, conn *pgx.Conn) (bool, error) {
 		ctxR, cancel := context.WithTimeout(c, 2*time.Second)
 		defer cancel()
 		_, err := conn.Exec(ctxR, "RESET app.tenant_id")
-		return err == nil
+		return err == nil, nil
 	}
 	cfg.AfterRelease = func(conn *pgx.Conn) bool {
 		ctxR, cancel := context.WithTimeout(context.Background(), 2*time.Second)

@@ -43,7 +43,7 @@ func TestOpenPoolReturnsHealthy(t *testing.T) {
 	assert.Equal(t, 1, got)
 }
 
-func TestBeforeAcquireResetsGUC(t *testing.T) {
+func TestConnPrepareResetsGUC(t *testing.T) {
 	dsn, stop := startPG(t)
 	defer stop()
 	ctx := context.Background()
@@ -59,7 +59,7 @@ func TestBeforeAcquireResetsGUC(t *testing.T) {
 	require.NoError(t, err)
 	conn.Release()
 
-	// Next acquire must see an empty GUC because BeforeAcquire resets.
+	// Next acquire must see an empty GUC because PrepareConn resets.
 	conn2, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn2.Release()

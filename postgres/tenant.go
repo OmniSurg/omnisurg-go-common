@@ -20,7 +20,7 @@ type Conn interface {
 // WithTenant acquires a connection, sets the app.tenant_id GUC for its
 // lifetime, runs fn, and releases. RLS policies referencing
 // current_setting('app.tenant_id') will see the supplied tenantID.
-// After release, BeforeAcquire and AfterRelease both reset the GUC so the
+// After release, PrepareConn and AfterRelease both reset the GUC so the
 // next checkout starts clean.
 //
 // tenantID is set via set_config(name, value, false) which is session level
